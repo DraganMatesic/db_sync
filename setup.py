@@ -5,11 +5,11 @@ with open("README.md", "r") as fh:
 
 setup(name='db_sync',
       version='0.0.1',
-      description='cross database table synchronisation and replication',
+      description='cross-database table synchronisation and replication',
       long_description=long_description,
       long_description_content_type="text/markdown",
       author='Dragan Matesic',
-      author_email='',
+      author_email='reach me on LinkedIn dont spam my inbox',
       license='MIT',
       packages=find_packages(),
       zip_safe=False,
