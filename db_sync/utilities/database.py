@@ -2,6 +2,7 @@ import json
 import os
 import sqlalchemy
 from sqlalchemy import *
+from functools import partial
 from datetime import datetime
 from db_sync.utilities import env
 from sqlalchemy.orm import sessionmaker
@@ -61,6 +62,8 @@ class Database:
         self.postgres = Postgres
         self.mssql = MsSQL
         self.options = Options()
+        self.db_node = db_node
+        self.db_config = dict()
 
         if check:
             # checks if env variables are loaded
@@ -72,6 +75,8 @@ class Database:
         # convert to dict
         db_config = json.loads(db_config)
         assert type(db_config) is dict
+
+        self.db_config = db_config
 
         # connection attributes
         self.engine = self.engine_construct(db_config, driver, **kwargs)
@@ -168,6 +173,10 @@ class Database:
             else:
                 raise NotImplementedError(f"dialect {dialect_name} not implemented")
 
+    def get_schema_names(self):
+        with self.engine.connect() as conn:
+            return conn.dialect.get_schema_names(conn)
+
     def create_tables(self, declare_base, drop=True):
         """
         # creates one or more tables with same inherited declarative_base
@@ -182,9 +191,25 @@ class Database:
         self.create_schema(declare_base.metadata.schema)
         declare_base.metadata.create_all(self.engine)
 
-    def map_all_tables(self):
-        # todo https://docs.sqlalchemy.org/en/20/orm/extensions/automap.html
-        base = automap_base()
-        base.prepare(autoload_with=self.engine)
+    def get_tables(self, cls, tablename, table, tablelist: list = None):
+        tablelist.append({'server_id': self.db_node,
+                          'database_name': self.engine.url.database,
+                          'database_type': self.engine.name,
+                          'schema_name': table.schema,
+                          'table_name': table.name})
 
-        print(base.classes.__dir__())
+    def get_all_tables(self):
+        map_tables = list()
+
+        # todo https://docs.sqlalchemy.org/en/20/orm/extensions/automap.html
+        db_schemas = self.get_schema_names()
+        for db_schema in db_schemas:
+            current_size = map_tables.__len__()
+            base = automap_base()
+            base.prepare(autoload_with=self.engine, schema=db_schema, modulename_for_table=partial(self.get_tables, tablelist=map_tables))
+
+            if map_tables.__len__() == current_size:
+                map_tables.append({'server_id': self.db_node, 'database_name': self.engine.url.database,
+                                   'database_type': self.engine.name,'schema_name': db_schema,
+                                   'table_name': None})
+        return map_tables
